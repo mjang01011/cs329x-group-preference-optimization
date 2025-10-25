@@ -140,8 +140,12 @@ class llmodel(nn.Module):
         return prompt
 
 
-@hydra.main(config_path="configs", config_name="baseline")
+@hydra.main(config_path="configs", config_name="baseline", version_base=None)
 def main(config: DictConfig) -> None:
+    # Always start in the original working directory (project root)
+    import hydra
+    os.chdir(hydra.utils.get_original_cwd())
+
     set_random_seed(config.seed)
     config.data.task = 'meta_SFT'
     if 'alpaca' in config.model_ckpt:
@@ -150,8 +154,12 @@ def main(config: DictConfig) -> None:
         config.prompt_format = 'llama2'
     dir_path = './baselines/base_model_results' # where to store the base model opinions
     if not os.path.exists(dir_path):
-        os.mkdir(dir_path)
+        os.makedirs(dir_path, exist_ok=True)
+    # Ensure trainer log directory exists too (for prepare_ds)
+    os.makedirs(config.trainer.reproduce_exp_log_dir, exist_ok=True)
+
     print(dir_path)
+    
     ds = prepare_ds(config)
     all_ds = ds['train'] + ds['test']
     model, tokenizer = prepare_model_tokenizer(config, load_pretrained=False)

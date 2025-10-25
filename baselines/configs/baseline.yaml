@@ -1,7 +1,11 @@
 project_name: group-alignment-sft
 expid: None
-model_ckpt: ./recover_weights_alpaca_7b
-#model_ckpt: ./llama-2-7b-chat-hf
+# model_ckpt: ./recover_weights_alpaca_7b
+# model_ckpt: "C:/Users/desti/Desktop/CS329X/Group-Preference-Optimization/baselines/recover_weights_alpaca_7b"
+
+model_ckpt: ./llama-2-7b-chat-hf
+# model_ckpt: meta-llama/Llama-2-7b-chat-hf
+# model_ckpt: meta-llama/Meta-Llama-3-8B
 prompt_format: llama2
 use_int8: True
 
