@@ -11,7 +11,7 @@ from transformers import (
     Trainer
 )
 import pandas as pd
-from peft import LoraConfig, get_peft_model, prepare_model_for_int8_training, PeftModel, PeftConfig
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training, PeftModel, PeftConfig
 from datasets import (
     load_dataset, 
     Dataset,
@@ -103,7 +103,7 @@ def prepare_model_tokenizer(config, reward_model=False, load_pretrained=False, l
     model.config.pad_token_id = tokenizer.eos_token_id
     
     if config.use_int8:
-        model = prepare_model_for_int8_training(model)
+        model = prepare_model_for_kbit_training(model)
         
     lora_config = LoraConfig(
         r=config.lora.r,
