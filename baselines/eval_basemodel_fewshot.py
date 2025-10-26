@@ -133,9 +133,15 @@ def main(config: DictConfig) -> None:
         config.prompt_format = 'alpaca'
     elif 'lama' in config.model_ckpt:
         config.prompt_format = 'llama2'
-    dir_path = './baselines/base_model_results/few_shots' # where to store the base model opinions
-    if not os.path.exists(dir_path):
-        os.mkdir(dir_path)
+        
+    # Always go back to repo root when using Hydra
+    import hydra
+    os.chdir(hydra.utils.get_original_cwd())
+
+    # Make full directory safely (including parents)
+    dir_path = './baselines/base_model_results/few_shots'
+    os.makedirs(dir_path, exist_ok=True)
+
     print(dir_path)
     ds = prepare_ds(config)
     all_ds = ds['train'] + ds['test']
