@@ -43,6 +43,7 @@ class llmodel(nn.Module):
         # Encode the sentence using the tokenizer and return the model predictions.
         max_len = 4096 if self.prompt_format == "llama2" else 2048
         inputs = self.tokenizer.encode(sentence, return_tensors="pt", max_length=max_len, truncation=True)
+        inputs.to(self.device)
         with torch.no_grad():
             outputs = self.model(inputs)
             predictions = outputs[0]
@@ -51,6 +52,7 @@ class llmodel(nn.Module):
     def get_sentence_embedding(self, sentence):
         # Encode the sentence using the tokenizer and feed it to the model.
         inputs = self.tokenizer.encode(sentence, return_tensors="pt")
+        inputs.to(self.device)
         last_hidden_states = self.model(inputs, output_hidden_states=True).hidden_states[-1]
         last_token_embd = last_hidden_states[:, -1, :]
         return last_token_embd

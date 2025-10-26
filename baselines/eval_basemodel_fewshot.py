@@ -35,10 +35,11 @@ torch.set_num_threads(1)
 
 class llmodel(nn.Module):  
     def __init__(self, config, model, tokenizer):
-        super(llmodel, self).__init__()  # Initializing the base class
+        super(llmodel, self).__init__()
         self.model = model
         self.tokenizer = tokenizer
         self.config = config
+        self.device = next(model.parameters()).device  # ✅ auto-detect model device
         if 'alpaca' in self.config.model_ckpt:
             self.prompt_format = 'alpaca'
         elif 'lama' in self.config.model_ckpt:
@@ -47,65 +48,51 @@ class llmodel(nn.Module):
             self.prompt_format = 'alpaca'
 
     def get_predictions(self, sentence):
-        # Encode the sentence using the tokenizer and return the model predictions.
+        # Encode and move to model device
         max_len = 4096 if self.prompt_format == "llama2" else 2048
         inputs = self.tokenizer(sentence, return_tensors="pt", max_length=max_len, truncation=True)
+        inputs = {k: v.to(self.model.device) for k, v in inputs.items()}  # ✅ ensure tensors on same device
         with torch.no_grad():
             outputs = self.model(**inputs)
             predictions = outputs[0]
         return predictions
     
     def get_sentence_embedding(self, sentence):
-        # Encode the sentence using the tokenizer and feed it to the model.
-        inputs = self.tokenizer.encode(sentence, return_tensors="pt")
-        last_hidden_states = self.model(inputs, output_hidden_states=True).hidden_states[-1]
+        # Encode and move to model device
+        inputs = self.tokenizer.encode(sentence, return_tensors="pt").to(self.model.device)  # ✅
+        with torch.no_grad():
+            last_hidden_states = self.model(inputs, output_hidden_states=True).hidden_states[-1]
         last_token_embd = last_hidden_states[:, -1, :]
         return last_token_embd
-    
+
+    def get_batch_sentence_embeddings(self, sentences):
+        inputs = self.tokenizer(sentences, return_tensors="pt", padding=True, truncation=True, max_length=512)
+        inputs = {k: v.to(self.model.device) for k, v in inputs.items()}  # ✅
+        with torch.no_grad():
+            outputs = self.model(**inputs, output_hidden_states=True)
+        embeddings = outputs.hidden_states[-1][:, -1, :]
+        return embeddings
+
     def get_next_word_probabilities(self, sentence, top_k=200):
-
-        # Get the model predictions for the sentence.
         predictions = self.get_predictions(sentence)
-        
-        # Get the next token candidates.
         next_token_candidates_tensor = predictions[0, -1, :]
-
-        # Get the top k next token candidates.
-        topk_candidates_indexes = torch.topk(
-            next_token_candidates_tensor, top_k).indices.tolist()
-
-        topk_candidates_probabilities = \
-            next_token_candidates_tensor[topk_candidates_indexes].tolist()
-        
-
-        # Decode the top k candidates back to words.
-        topk_candidates_tokens = \
-            [self.tokenizer.decode([idx]).strip() for idx in topk_candidates_indexes]
-
-        # Return the top k candidates and their probabilities.
-
+        topk_candidates_indexes = torch.topk(next_token_candidates_tensor, top_k).indices.tolist()
+        topk_candidates_probabilities = next_token_candidates_tensor[topk_candidates_indexes].tolist()
+        topk_candidates_tokens = [self.tokenizer.decode([idx]).strip() for idx in topk_candidates_indexes]
         return list(zip(topk_candidates_tokens, topk_candidates_probabilities))
     
     def get_choice_probs(self, raw_token_probs, num_choices):
-
         choices = list(string.ascii_uppercase[:num_choices])
         choice_probs = {choice: [] for choice in choices}
-        # Find the minimum logit from all tokens to be used as a default for missing choices.
         min_logit = min(logit for _, logit in raw_token_probs)
-
-        # Accumulate logits for each choice token in the top-K set
         for token, logit in raw_token_probs:
-            if token in choices and len(choice_probs[token]) < 1: # only take the max value of the choice in case there are repeated tokens
+            if token in choices and len(choice_probs[token]) < 1:
                 choice_probs[token] = [np.exp(logit)]
-        # Compute mean log probabilities or set to -inf if list is empty
         for key, value in choice_probs.items():
             choice_probs[key] = value[0] if len(value) == 1 else min_logit
-
-        # Normalize after exponential
         total = sum(choice_probs.values())
         for c in choice_probs:
             choice_probs[c] /= total
-
         return choice_probs
 
     def process_example(self, question, selections, options, context=False, group=None, steer='bio'):
@@ -119,14 +106,14 @@ class llmodel(nn.Module):
                                 delimiter='\t')
                 context_input = steer_df.loc[steer_df['subgroup'] == group, 'question'].values[0]
                 if steer == 'qa':
-                    instruction += '. \n For context, here is a question you previsouly answered:' + context_input + '\n' + group
+                    instruction += '. \n For context, here is a question you previously answered:' + context_input + '\n' + group
                 else:
                     instruction += '. \n' + context_input 
             elif self.config.data.dataset == 'anthropic_global_opinions':
                 if steer == 'bio':
                     tmp = 'Below, you will be asked to provide a short description of the country you are from and then answer some questions. \n Description: I come from '
                 elif steer == 'qa':
-                    tmp = 'For context, here is a question you previsouly answered: Which country are you from? '
+                    tmp = 'For context, here is a question you previously answered: Which country are you from? '
                 elif steer == 'portray':
                     tmp = 'Answer the following question by selecting ONE of the listed options as if you are from '
                 instruction += '\n' + tmp + str(group)
@@ -135,6 +122,7 @@ class llmodel(nn.Module):
         elif self.prompt_format == "llama2":
             prompt = get_llama2_prompt(user_message=input_text, system_prompt=instruction)
         return prompt
+
 
 
 @hydra.main(config_path="configs", config_name="baseline")
