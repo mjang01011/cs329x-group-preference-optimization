@@ -194,11 +194,32 @@ def main(config: DictConfig) -> None:
             csv_filename = f"{dir_path}/few_shot{config.eval_n_ctx_qs}_{config.prompt_format}_{config.data.dataset}_steer{config.steer}_results.csv"
         else:
             csv_filename = f"{dir_path}/few_shot{config.eval_n_ctx_qs}_{config.prompt_format}_{config.data.dataset}_results.csv"
+        rep_values_per_group[group_name] = sum(rep_values) / len(rep_values)
+
+        # ✅ Print the per-group results before writing to CSV
+        print("\n=== Alignment Scores for group:", group_name, "===")
+        for group, rep_value in rep_values_per_group.items():
+            print(f"  {group:30s}  ->  {rep_value:.4f}")
+
+        if config.use_context:
+            csv_filename = f"{dir_path}/few_shot{config.eval_n_ctx_qs}_{config.prompt_format}_{config.data.dataset}_steer{config.steer}_results.csv"
+        else:
+            csv_filename = f"{dir_path}/few_shot{config.eval_n_ctx_qs}_{config.prompt_format}_{config.data.dataset}_results.csv"
+
+        # ✅ Print the output filename for clarity
+        print(f"\n📂 Writing results to: {csv_filename}\n")
+
         with open(csv_filename, 'w', newline='') as csvfile:
             csvwriter = csv.writer(csvfile)
             csvwriter.writerow(['Group', 'Alignment Score'])
             for group, rep_value in rep_values_per_group.items():
                 csvwriter.writerow([group, rep_value])
-if __name__ == "__main__":
+
+    # ✅ Final summary after all groups processed
+    print("\n✅ All groups processed successfully!")
+    print("Final alignment results:")
+    for group, rep_value in rep_values_per_group.items():
+        print(f"  {group:30s}  ->  {rep_value:.4f}")
+
     main()
 
